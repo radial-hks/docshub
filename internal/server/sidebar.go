@@ -21,6 +21,11 @@ func GenerateSidebar(articles []model.Article) string {
 
 	groups := make(map[string][]model.Article)
 	for _, a := range articles {
+		// HTML articles live under /html/ with its own index page;
+		// skip them in the Docsify sidebar to avoid 404 on hash routing.
+		if a.Format == "html" {
+			continue
+		}
 		cat := a.Category
 		if cat == "" {
 			cat = unclassifiedSidebarLabel
@@ -41,17 +46,22 @@ func GenerateSidebar(articles []model.Article) string {
 			return arts[i].Date.After(arts[j].Date)
 		})
 		for _, a := range arts {
-			link := a.File
-			if a.Format == "html" {
-				catDir := a.Category
-				if catDir == "" {
-					catDir = unclassifiedDir
-				}
-				slug := Slugify(a.Title)
-				link = "/html/" + catDir + "/" + slug
-			}
-			fmt.Fprintf(&b, "  - [%s](%s)\n", a.Title, link)
+			fmt.Fprintf(&b, "  - [%s](%s)\n", a.Title, a.File)
 		}
+	}
+
+	// Add link to /html/ index if any HTML articles exist.
+	hasHTML := false
+	for _, a := range articles {
+		if a.Format == "html" {
+			hasHTML = true
+			break
+		}
+	}
+	if hasHTML {
+		// Note: this link is a real HTTP path, not a Docsify hash route.
+		// Users must navigate directly; Docsify cannot serve it from sidebar.
+		// The Docsify README.md should include a link to /html/ instead.
 	}
 
 	return b.String()

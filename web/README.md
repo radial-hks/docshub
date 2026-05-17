@@ -9,3 +9,4 @@
 - 打开左侧 sidebar 浏览文章
 - 使用顶部搜索框检索内容
 - 直接访问 Markdown 文章路径，例如 `/articles/Note/smoke-test-publish-2026-05-17.md`
+- <a href="/html/" target="_blank">HTML Articles</a> — 浏览 HTML 格式文章

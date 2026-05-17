@@ -195,15 +195,12 @@ func TestGenerateSidebarHTMLArticle(t *testing.T) {
 		},
 	}
 	got := GenerateSidebar(articles)
-	if !strings.Contains(got, "- Reports\n") {
-		t.Errorf("missing Reports category heading in:\n%s", got)
+	// HTML articles should NOT appear in the Docsify sidebar.
+	if strings.Contains(got, "Reports") {
+		t.Errorf("HTML article category should not appear in sidebar:\n%s", got)
 	}
-	if !strings.Contains(got, "  - [HTML Report](/html/Reports/html-report)") {
-		t.Errorf("missing HTML article link in:\n%s", got)
-	}
-	// Should NOT use the raw file path.
-	if strings.Contains(got, "/articles/Reports/html-report.html") {
-		t.Errorf("HTML article should use /html/ route, not raw file path:\n%s", got)
+	if strings.Contains(got, "HTML Report") {
+		t.Errorf("HTML article link should not appear in sidebar:\n%s", got)
 	}
 }
 
@@ -217,7 +214,8 @@ func TestGenerateSidebarHTMLUnclassified(t *testing.T) {
 		},
 	}
 	got := GenerateSidebar(articles)
-	if !strings.Contains(got, "  - [Standalone HTML](/html/_unclassified/standalone-html)") {
-		t.Errorf("missing HTML unclassified link in:\n%s", got)
+	// HTML articles should NOT appear in the Docsify sidebar at all.
+	if strings.Contains(got, "Standalone HTML") {
+		t.Errorf("HTML article should not appear in sidebar:\n%s", got)
 	}
 }

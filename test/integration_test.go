@@ -371,16 +371,30 @@ func TestHTMLArticleFlow(t *testing.T) {
 		t.Errorf("HTML body should contain article content, got: %s", htmlBody)
 	}
 
-	// Verify sidebar uses /html/ route for HTML articles.
+	// Verify sidebar does NOT contain HTML articles (they live under /html/ index page).
 	sidebar, err := os.ReadFile(filepath.Join(dataDir, "_sidebar.md"))
 	if err != nil {
 		t.Fatalf("read _sidebar.md: %v", err)
 	}
-	if !strings.Contains(string(sidebar), "/html/Finance/quarterly-report") {
-		t.Errorf("_sidebar.md should use /html/ route for HTML article:\n%s", sidebar)
+	if strings.Contains(string(sidebar), "Quarterly Report") {
+		t.Errorf("_sidebar.md should NOT contain HTML article entries:\n%s", sidebar)
 	}
-	if strings.Contains(string(sidebar), "/articles/Finance/quarterly-report.html") {
-		t.Errorf("_sidebar.md should NOT use raw file path for HTML articles:\n%s", sidebar)
+
+	// Verify /html/ index page lists the HTML article.
+	idxResp, err := http.Get(ts.URL + "/html/")
+	if err != nil {
+		t.Fatalf("GET /html/: %v", err)
+	}
+	defer idxResp.Body.Close()
+	if idxResp.StatusCode != http.StatusOK {
+		t.Fatalf("GET /html/ status = %d, want 200", idxResp.StatusCode)
+	}
+	idxBody, err := io.ReadAll(idxResp.Body)
+	if err != nil {
+		t.Fatalf("read /html/ body: %v", err)
+	}
+	if !strings.Contains(string(idxBody), "quarterly-report") {
+		t.Errorf("/html/ index should link to the HTML article, got: %s", idxBody)
 	}
 
 	// Verify article metadata via API.
