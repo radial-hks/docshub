@@ -140,6 +140,7 @@ DOCSHUB_PORT=9090 DOCSHUB_DATA=/data/docs ./docshub serve
 | GET | `/api/articles` | 列出文章，支持 `category`、`tag`、`author`、`q`（搜索）查询参数 |
 | GET | `/api/articles/{id}` | 获取单篇文章元数据 |
 | DELETE | `/api/articles/{id}` | 删除文章 |
+| GET | `/html/` | HTML 文章索引页（按分类分组） |
 | GET | `/html/{category}/{slug}` | 浏览器原生渲染 HTML 文章 |
 
 `web/` 下的静态文件（`index.html`、`_sidebar.md`、`articles/`）从 `/` 提供。
@@ -193,9 +194,12 @@ author: radial
 DocsHub 同时支持 HTML 文章：
 
 - `.html`/`.htm` 后缀的文件会被自动识别为 HTML 格式
-- HTML 文章通过 `/html/{category}/{slug}` 路由提供浏览器原生渲染
 - 也可使用 `--format html` 手动指定格式
-- Markdown 文章继续由 Docsify 渲染，HTML 文章由浏览器直接渲染
+- HTML 文章通过独立的 `/html/` 索引页浏览（不出现在 Docsify 侧边栏中）
+- 每篇 HTML 文章通过 `/html/{category}/{slug}` 路由提供浏览器原生渲染
+- Markdown 文章继续由 Docsify 渲染，享有侧边栏导航和全文搜索
+
+> **为什么分离？** Docsify 使用 hash 路由（`#/path`），会拦截侧边栏链接并将其当作 Markdown 文件路径处理。HTML 文章在 Docsify 内会 404，因此独立放置在 `/html/` 索引页下，使用直链访问。
 
 ## AI 自动分类
 

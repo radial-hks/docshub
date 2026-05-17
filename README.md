@@ -140,6 +140,7 @@ Start the DocsHub server.
 | GET | `/api/articles` | List articles. Query params: `category`, `tag`, `author`, `q` (search). |
 | GET | `/api/articles/{id}` | Get a single article's metadata. |
 | DELETE | `/api/articles/{id}` | Delete an article. |
+| GET | `/html/` | HTML articles index page (grouped by category). |
 | GET | `/html/{category}/{slug}` | Serve HTML article with browser-native rendering. |
 
 Static files under `web/` (including `index.html`, `_sidebar.md`, and `articles/`) are served from `/`.
@@ -193,9 +194,12 @@ Any field can be overridden by CLI flags.
 DocsHub supports HTML articles alongside Markdown:
 
 - Files with `.html`/`.htm` extension are auto-detected as HTML format
-- HTML articles are served via the `/html/{category}/{slug}` route with `Content-Type: text/html` for browser-native rendering
 - Use `--format html` to manually specify format
-- Markdown articles continue to be rendered by Docsify; HTML articles are rendered directly by the browser
+- HTML articles are served from a dedicated `/html/` index page (not in the Docsify sidebar)
+- Each HTML article renders via `/html/{category}/{slug}` with browser-native rendering
+- Markdown articles continue to be rendered by Docsify with sidebar navigation and search
+
+> **Why separate?** Docsify uses hash-based routing (`#/path`), which intercepts sidebar links and treats them as Markdown file paths. HTML articles would 404 inside Docsify, so they live under their own `/html/` index with direct links.
 
 ## AI Auto-Classification
 
