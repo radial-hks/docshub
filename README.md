@@ -220,6 +220,10 @@ If the LLM is unavailable, the flow falls back to manual metadata — no blockin
 
 Re-publishing an article (by passing `version_of` in the API request) archives the previous file under `web/articles/<category>/.versions/<slug>/v<N>-<date>.md` and writes the new content in place. Version history is tracked in `meta.json` next to the archived files, and the article's `version` field is incremented.
 
+## Documentation
+
+- [文章发布工作流](./docs/publishing-workflow.md) — 完整的发布流程指南，含 AI 分类、版本管理、常见问题等
+
 ## Development
 
 ### Run tests
