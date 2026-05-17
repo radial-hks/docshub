@@ -1,6 +1,6 @@
 ---
 name: docshub-publish
-version: 1.0.0
+version: 1.1.0
 description: "Use docshub CLI to publish or update articles on LAN DocsHub server. Covers push, AI classify, HTML, versioning."
 triggers:
   - publish article
@@ -79,7 +79,9 @@ Published: <slug>-<date> (v1)
 URL: http://localhost:8080/articles/<category>/<slug>.md
 ```
 
-验证：用浏览器或 curl 访问该 URL 确认文章可读。
+验证：
+- **Markdown 文章**：浏览器访问 Docsify 页面，从左侧 sidebar 导航找到文章
+- **HTML 文章**：访问 `http://localhost:8080/html/` 索引页，或直接访问 `http://localhost:8080/html/<category>/<slug>`
 
 ## 元数据优先级
 
@@ -176,7 +178,9 @@ docshub delete <article-id> --yes   # 删除文章
 
 - category 必须是预设值之一：AI / UE / DevOps / Research / Note / Other
 - 中文标题的 slug 会回退为 `article-{timestamp}`，建议 frontmatter 中用英文 title
-- HTML 文章通过 `/html/{category}/{slug}` 访问，Markdown 通过 `/#/articles/{category}/{slug}` 访问
+- Markdown 文章通过 Docsify sidebar 导航，访问路径 `/#/articles/{category}/{slug}`
+- HTML 文章不出现在 Docsify sidebar（Docsify hash 路由会 404），通过 `/html/` 索引页浏览，直链 `/html/{category}/{slug}`
+- Docsify 首页有 "HTML Articles" 链接（target=_blank 新窗口打开 /html/ 索引）
 
 ## 常见问题
 
@@ -186,6 +190,7 @@ docshub delete <article-id> --yes   # 删除文章
 | AI 分类不准 | 用 `--category` 覆盖，或 `--classify-json` 完全控制 |
 | 修改已发布文章 | delete + 重新 push，或通过 API version_of |
 | slug 是 article-timestamp | 中文标题无 ASCII slug，改用英文 title |
+| HTML 文章在 sidebar 点了 404 | HTML 文章不在 sidebar 中，去 `/html/` 索引页访问（v0.2.2+） |
 
 ## 验证清单
 
