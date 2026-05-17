@@ -14,7 +14,8 @@ import (
 func RunSearch(args []string, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("search", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	if err := fs.Parse(args); err != nil {
+	// Reorder so flags come before positional args.
+	if err := fs.Parse(reorderFlags(fs, args)); err != nil {
 		return err
 	}
 	rest := fs.Args()

@@ -23,7 +23,8 @@ func RunDelete(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	fs.SetOutput(stderr)
 	var opts DeleteOptions
 	fs.BoolVar(&opts.Yes, "yes", false, "skip confirmation prompt")
-	if err := fs.Parse(args); err != nil {
+	// Same fix as push: reorder so flags come before positional args.
+	if err := fs.Parse(reorderFlags(fs, args)); err != nil {
 		return err
 	}
 	rest := fs.Args()

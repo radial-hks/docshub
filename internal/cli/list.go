@@ -26,7 +26,8 @@ func RunList(args []string, stdout, stderr io.Writer) error {
 	fs.StringVar(&opts.Category, "category", "", "filter by category")
 	fs.StringVar(&opts.Tag, "tag", "", "filter by tag")
 	fs.StringVar(&opts.Author, "author", "", "filter by author")
-	if err := fs.Parse(args); err != nil {
+	// Reorder so flags come before positional args.
+	if err := fs.Parse(reorderFlags(fs, args)); err != nil {
 		return err
 	}
 
