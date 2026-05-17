@@ -53,6 +53,9 @@ func New(dataDir string) (*Store, error) {
 	if err := s.loadIndex(); err != nil {
 		return nil, fmt.Errorf("load index: %w", err)
 	}
+	if err := s.refreshSidebar(); err != nil {
+		return nil, fmt.Errorf("refresh sidebar: %w", err)
+	}
 	return s, nil
 }
 
@@ -187,6 +190,9 @@ func (s *Store) Create(req model.PublishRequest) (*model.PublishResponse, error)
 	if err := s.saveIndex(); err != nil {
 		return nil, fmt.Errorf("save index: %w", err)
 	}
+	if err := s.refreshSidebar(); err != nil {
+		return nil, fmt.Errorf("refresh sidebar: %w", err)
+	}
 
 	return &model.PublishResponse{
 		ID:               article.ID,
@@ -267,7 +273,10 @@ func (s *Store) Delete(id string) error {
 		return fmt.Errorf("remove article file: %w", err)
 	}
 	s.articles = append(s.articles[:idx], s.articles[idx+1:]...)
-	return s.saveIndex()
+	if err := s.saveIndex(); err != nil {
+		return err
+	}
+	return s.refreshSidebar()
 }
 
 var slugReplaceRE = regexp.MustCompile(`[^a-z0-9]+`)
