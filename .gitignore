@@ -1,0 +1,16 @@
+# Binaries
+/docshub-server
+/docshub
+*.exe
+
+# Data (runtime)
+web/articles/
+web/_sidebar.md
+index.json
+
+# OS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
