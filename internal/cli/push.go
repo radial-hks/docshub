@@ -1,3 +1,265 @@
 package cli
 
-// TODO: implement
+import (
+	"bufio"
+	"encoding/json"
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/radial-hks/docshub/internal/model"
+)
+
+// Frontmatter holds the fields recognized at the top of a markdown article.
+type Frontmatter struct {
+	Title    string
+	Category string
+	Tags     []string
+	Author   string
+}
+
+// parseFrontmatter scans content for a leading YAML-ish frontmatter block
+// delimited by --- lines. It returns the parsed metadata and the body with
+// the frontmatter stripped. If no frontmatter is present, body == content and
+// the returned Frontmatter is zero-valued.
+func parseFrontmatter(content string) (Frontmatter, string) {
+	normalized := strings.ReplaceAll(content, "\r\n", "\n")
+	if !strings.HasPrefix(normalized, "---\n") {
+		return Frontmatter{}, content
+	}
+	rest := normalized[len("---\n"):]
+	// Locate the closing "---" on its own line.
+	lines := strings.SplitN(rest, "\n", -1)
+	endLine := -1
+	for i, ln := range lines {
+		if strings.TrimSpace(ln) == "---" {
+			endLine = i
+			break
+		}
+	}
+	if endLine < 0 {
+		return Frontmatter{}, content
+	}
+	fm := parseFrontmatterLines(lines[:endLine])
+	body := strings.Join(lines[endLine+1:], "\n")
+	return fm, body
+}
+
+func parseFrontmatterLines(lines []string) Frontmatter {
+	fm := Frontmatter{}
+	for _, raw := range lines {
+		line := strings.TrimSpace(raw)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		colon := strings.IndexByte(line, ':')
+		if colon < 0 {
+			continue
+		}
+		key := strings.TrimSpace(line[:colon])
+		val := strings.TrimSpace(line[colon+1:])
+		val = unquote(val)
+		switch strings.ToLower(key) {
+		case "title":
+			fm.Title = val
+		case "category":
+			fm.Category = val
+		case "author":
+			fm.Author = val
+		case "tags":
+			fm.Tags = parseTagList(val)
+		}
+	}
+	return fm
+}
+
+// parseTagList accepts "[a, b, c]" or "a, b, c".
+func parseTagList(val string) []string {
+	val = strings.TrimSpace(val)
+	if strings.HasPrefix(val, "[") && strings.HasSuffix(val, "]") {
+		val = val[1 : len(val)-1]
+	}
+	parts := strings.Split(val, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		t := unquote(strings.TrimSpace(p))
+		if t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+func unquote(s string) string {
+	if len(s) >= 2 {
+		first, last := s[0], s[len(s)-1]
+		if (first == '"' && last == '"') || (first == '\'' && last == '\'') {
+			return s[1 : len(s)-1]
+		}
+	}
+	return s
+}
+
+// PushOptions captures flag inputs for the push command.
+type PushOptions struct {
+	Category string
+	Tags     string
+	Yes      bool
+	Classify string
+}
+
+// RunPush implements `docshub push <file> [flags]`.
+func RunPush(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
+	fs := flag.NewFlagSet("push", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	var opts PushOptions
+	fs.StringVar(&opts.Category, "category", "", "category for the article")
+	fs.StringVar(&opts.Tags, "tags", "", "comma-separated tags")
+	fs.BoolVar(&opts.Yes, "yes", false, "skip confirmation prompt")
+	fs.StringVar(&opts.Classify, "classify", "", "raw JSON {title,category,tags,author} to override")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	rest := fs.Args()
+	if len(rest) < 1 {
+		return fmt.Errorf("usage: docshub push <file.md> [flags]")
+	}
+	file := rest[0]
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	content, err := os.ReadFile(file)
+	if err != nil {
+		return fmt.Errorf("read file: %w", err)
+	}
+
+	req, err := buildPublishRequest(file, string(content), opts, cfg)
+	if err != nil {
+		return err
+	}
+
+	printSummary(stdout, req)
+
+	if !opts.Yes {
+		ok, err := confirm(stdin, stdout)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			fmt.Fprintln(stdout, "Aborted.")
+			return nil
+		}
+	}
+
+	client := newClient(cfg.ServerURL)
+	data, status, err := client.doPost("/api/articles", req)
+	if err != nil {
+		return fmt.Errorf("request server: %w", err)
+	}
+	if status < 200 || status >= 300 {
+		return fmt.Errorf("server: %s", errorBody(data, status))
+	}
+	var resp model.PublishResponse
+	if err := json.Unmarshal(data, &resp); err != nil {
+		return fmt.Errorf("decode response: %w", err)
+	}
+	fmt.Fprintf(stdout, "Published: %s (v%d)\nURL: %s%s\n", resp.ID, resp.Version, strings.TrimRight(cfg.ServerURL, "/"), resp.Path)
+	return nil
+}
+
+// buildPublishRequest applies the priority rules:
+// classify JSON > CLI flags > frontmatter > defaults.
+func buildPublishRequest(file, content string, opts PushOptions, cfg *Config) (model.PublishRequest, error) {
+	fm, body := parseFrontmatter(content)
+
+	req := model.PublishRequest{
+		Title:    fm.Title,
+		Category: fm.Category,
+		Tags:     append([]string(nil), fm.Tags...),
+		Author:   fm.Author,
+		Content:  body,
+	}
+
+	if opts.Category != "" {
+		req.Category = opts.Category
+	}
+	if opts.Tags != "" {
+		req.Tags = parseTagList(opts.Tags)
+	}
+
+	if opts.Classify != "" {
+		var c struct {
+			Title    string   `json:"title"`
+			Category string   `json:"category"`
+			Tags     []string `json:"tags"`
+			Author   string   `json:"author"`
+		}
+		if err := json.Unmarshal([]byte(opts.Classify), &c); err != nil {
+			return req, fmt.Errorf("parse --classify: %w", err)
+		}
+		if c.Title != "" {
+			req.Title = c.Title
+		}
+		if c.Category != "" {
+			req.Category = c.Category
+		}
+		if len(c.Tags) > 0 {
+			req.Tags = c.Tags
+		}
+		if c.Author != "" {
+			req.Author = c.Author
+		}
+	}
+
+	if req.Author == "" {
+		req.Author = cfg.Author
+	}
+	if req.Title == "" {
+		base := filepath.Base(file)
+		ext := filepath.Ext(base)
+		req.Title = strings.TrimSuffix(base, ext)
+	}
+	return req, nil
+}
+
+func printSummary(w io.Writer, req model.PublishRequest) {
+	fmt.Fprintln(w, "About to publish:")
+	fmt.Fprintf(w, "  Title:    %s\n", req.Title)
+	fmt.Fprintf(w, "  Category: %s\n", displayOrDash(req.Category))
+	tags := "-"
+	if len(req.Tags) > 0 {
+		tags = strings.Join(req.Tags, ", ")
+	}
+	fmt.Fprintf(w, "  Tags:     %s\n", tags)
+	fmt.Fprintf(w, "  Author:   %s\n", displayOrDash(req.Author))
+}
+
+func displayOrDash(s string) string {
+	if s == "" {
+		return "-"
+	}
+	return s
+}
+
+func confirm(stdin io.Reader, stdout io.Writer) (bool, error) {
+	fmt.Fprint(stdout, "Proceed? [Y/n/e]: ")
+	sc := bufio.NewScanner(stdin)
+	if !sc.Scan() {
+		return true, nil
+	}
+	switch strings.ToLower(strings.TrimSpace(sc.Text())) {
+	case "", "y", "yes":
+		return true, nil
+	case "e":
+		fmt.Fprintln(stdout, "Edit mode not yet supported; aborting.")
+		return false, nil
+	default:
+		return false, nil
+	}
+}
