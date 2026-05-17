@@ -26,7 +26,7 @@ triggers:
 ## 前提条件
 
 1. DocsHub 服务器运行中：`docshub serve`（默认 `:8080`）
-2. CLI 已配置：`~/.docshub.json` 中 `server_url` 和 `author` 已填写
+2. CLI 已配置：`docshub init` 设置 author（server_url 默认 `http://localhost:8080`）
 3. 二进制在 PATH 中或用绝对路径
 
 ## 发布流程
@@ -190,6 +190,6 @@ docshub delete <article-id> --yes   # 删除文章
 ## 验证清单
 
 - [ ] 服务器运行中（`curl http://localhost:8080` 返回 200）
-- [ ] `~/.docshub.json` 中 server_url 和 author 已配置
+- [ ] `docshub init` 已执行，author 已设置
 - [ ] push 输出显示 Published + URL
 - [ ] 浏览器访问 URL 确认文章可读

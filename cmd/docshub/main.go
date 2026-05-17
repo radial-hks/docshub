@@ -47,7 +47,7 @@ func usage(w *os.File) {
 	fmt.Fprintln(w, "Usage: docshub <command> [args]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Commands:")
-	fmt.Fprintln(w, "  init                       Configure server URL, author, and AI classification")
+	fmt.Fprintln(w, "  init                       Configure server URL and author")
 	fmt.Fprintln(w, "  push <file> [flags]        Publish a Markdown article")
 	fmt.Fprintln(w, "  list [flags]               List published articles")
 	fmt.Fprintln(w, "  serve                      Start the docshub server")
