@@ -58,8 +58,8 @@ Frontmatter 字段：`title`、`category`、`tags`、`author`，均为可选。
 # 基本发布
 docshub push <file.md>
 
-# 带 AI 自动分类
-docshub push <file.md> --classify
+# Agent 辅助分类（推荐）
+docshub push <file.md> --classify-json '{"title":"...","category":"AI","tags":["t1"]}' --yes
 
 # 手动指定元数据（覆盖 frontmatter）
 docshub push <file.md> --category AI --tags llm,rag
@@ -95,22 +95,30 @@ URL: http://localhost:8080/articles/<category>/<slug>.md
 - frontmatter — 文件内声明
 - defaults — title 取文件名，author 取配置，category 空
 
-## AI 自动分类
+## AI 辅助分类
 
-需要 `~/.docshub.json` 配置 `classify_url`（Ollama 等 OpenAI 兼容 API）：
+发布时不需要额外配置 LLM 端点。分类由当前 Agent 或外部工具（Claude Code、Copilot 等）完成，结果通过 `--classify-json` 传入。
 
-```json
-{
-  "classify_url": "http://localhost:11434/v1/chat/completions",
-  "classify_model": "qwen2.5:7b"
-}
+### 推荐流程
+
+1. Agent 读取文章内容，生成分类结果
+2. 将结果作为 JSON 传入 push 命令：
+
+```bash
+docshub push <file.md> --classify-json '{"title":"文章标题","category":"AI","tags":["llm","rag"],"author":"radial"}' --yes
 ```
 
-使用 `--classify` 时：
-1. 前 3000 字符发送给 LLM
-2. LLM 返回 title/category/tags 建议
-3. AI 结果填充空字段（不覆盖已有值）
-4. LLM 不可用时静默降级，不阻塞发布
+### 手动分类
+
+不用 AI 时，直接通过 CLI 参数指定：
+
+```bash
+docshub push <file.md> --category AI --tags llm,rag
+```
+
+### 备选：内置 LLM 分类
+
+CLI 内置 `--classify` 标志，可调用本地 Ollama 等服务自动分类（需在 `~/.docshub.json` 配置 `classify_url`）。但在 Agent 工作流中不推荐——Agent 自身已具备分类能力，无需再调用外部模型。
 
 预设分类：`AI`、`UE`、`DevOps`、`Research`、`Note`、`Other`
 
