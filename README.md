@@ -222,7 +222,8 @@ Re-publishing an article (by passing `version_of` in the API request) archives t
 
 ## Documentation
 
-- [文章发布工作流](./docs/publishing-workflow.md) — 完整的发布流程指南，含 AI 分类、版本管理、常见问题等
+- [文章发布工作流](./docs/publishing-workflow.md) — 快速参考
+- [Hermes Skill](./skills/docshub-publish/SKILL.md) — AI Agent 集成用发布工作流 Skill
 
 ## Development
 
