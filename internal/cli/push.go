@@ -124,7 +124,9 @@ func RunPush(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	fs.BoolVar(&opts.Classify, "classify", false, "use AI to suggest title/category/tags via local LLM")
 	fs.StringVar(&opts.ClassifyJSON, "classify-json", "", "raw JSON {title,category,tags,author} to override metadata")
 	fs.StringVar(&opts.Format, "format", "", "article format: html or md (auto-detected from file extension)")
-	if err := fs.Parse(args); err != nil {
+	// Go's flag package stops parsing at the first non-flag argument.
+	// Reorder so flags come before positional args, allowing: push file.md --category AI
+	if err := fs.Parse(reorderFlags(fs, args)); err != nil {
 		return err
 	}
 	rest := fs.Args()
@@ -327,4 +329,48 @@ func confirm(stdin io.Reader, stdout io.Writer) (bool, error) {
 	default:
 		return false, nil
 	}
+}
+
+// reorderFlags rearranges args so that flag arguments (--name [value]) come
+// before positional arguments. This works around Go's flag package behavior
+// where parsing stops at the first non-flag token.
+func reorderFlags(fs *flag.FlagSet, args []string) []string {
+	visited := make(map[string]bool)
+	fs.Visit(func(f *flag.Flag) { visited[f.Name] = true }) // clear any previous
+
+	var flagArgs, posArgs []string
+	for i := 0; i < len(args); i++ {
+		s := args[i]
+		if !strings.HasPrefix(s, "-") {
+			posArgs = append(posArgs, s)
+			continue
+		}
+		// Handle --name=value form
+		if strings.Contains(s, "=") {
+			flagArgs = append(flagArgs, s)
+			continue
+		}
+		// s is --name or -x; check if it expects a value
+		name := strings.TrimLeft(s, "-")
+		f := fs.Lookup(name)
+		flagArgs = append(flagArgs, s)
+		if f != nil && !isBoolFlag(f) && i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+			i++
+			flagArgs = append(flagArgs, args[i])
+		}
+	}
+	return append(flagArgs, posArgs...)
+}
+
+// isBoolFlag checks whether a flag is a boolean flag.
+func isBoolFlag(f *flag.Flag) bool {
+	// flag.Flag doesn't expose IsBoolFlag directly, so we use a small hack:
+	// Try to set "true" and "false" — bool flags accept both, non-bools don't.
+	// A simpler approach: check the zero value via reflection or just maintain
+	// a known set. Since we control all flags, check by name.
+	switch f.Name {
+	case "yes", "classify":
+		return true
+	}
+	return false
 }

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"flag"
 	"reflect"
 	"strings"
 	"testing"
@@ -172,5 +173,42 @@ func TestBuildPublishRequest_FormatFlagOverrides(t *testing.T) {
 	}
 	if req.Format != "html" {
 		t.Errorf("Format = %q, want html from --format flag override", req.Format)
+	}
+}
+
+func TestReorderFlags_FileBeforeFlags(t *testing.T) {
+	fs := flag.NewFlagSet("test", flag.ContinueOnError)
+	cat := fs.String("category", "", "")
+	tags := fs.String("tags", "", "")
+	yes := fs.Bool("yes", false, "")
+	args := []string{"file.md", "--category", "Note", "--tags", "a,b", "--yes"}
+	reordered := reorderFlags(fs, args)
+	if err := fs.Parse(reordered); err != nil {
+		t.Fatalf("parse reordered: %v", err)
+	}
+	if *cat != "Note" {
+		t.Errorf("category = %q, want Note", *cat)
+	}
+	if *tags != "a,b" {
+		t.Errorf("tags = %q, want a,b", *tags)
+	}
+	if !*yes {
+		t.Errorf("yes = false, want true")
+	}
+	if len(fs.Args()) != 1 || fs.Args()[0] != "file.md" {
+		t.Errorf("positional args = %v, want [file.md]", fs.Args())
+	}
+}
+
+func TestReorderFlags_EqualsForm(t *testing.T) {
+	fs := flag.NewFlagSet("test", flag.ContinueOnError)
+	cat := fs.String("category", "", "")
+	args := []string{"file.md", "--category=AI"}
+	reordered := reorderFlags(fs, args)
+	if err := fs.Parse(reordered); err != nil {
+		t.Fatalf("parse reordered: %v", err)
+	}
+	if *cat != "AI" {
+		t.Errorf("category = %q, want AI", *cat)
 	}
 }
