@@ -41,7 +41,16 @@ func GenerateSidebar(articles []model.Article) string {
 			return arts[i].Date.After(arts[j].Date)
 		})
 		for _, a := range arts {
-			fmt.Fprintf(&b, "  - [%s](%s)\n", a.Title, a.File)
+			link := a.File
+			if a.Format == "html" {
+				catDir := a.Category
+				if catDir == "" {
+					catDir = unclassifiedDir
+				}
+				slug := Slugify(a.Title)
+				link = "/html/" + catDir + "/" + slug
+			}
+			fmt.Fprintf(&b, "  - [%s](%s)\n", a.Title, link)
 		}
 	}
 

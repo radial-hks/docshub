@@ -183,3 +183,41 @@ func TestRefreshSidebarOnNew(t *testing.T) {
 		t.Fatalf("unexpected initial sidebar: %q", string(data))
 	}
 }
+
+func TestGenerateSidebarHTMLArticle(t *testing.T) {
+	articles := []model.Article{
+		{
+			Title:    "HTML Report",
+			File:     "/articles/Reports/html-report.html",
+			Category: "Reports",
+			Format:   "html",
+			Date:     time.Now(),
+		},
+	}
+	got := GenerateSidebar(articles)
+	if !strings.Contains(got, "- Reports\n") {
+		t.Errorf("missing Reports category heading in:\n%s", got)
+	}
+	if !strings.Contains(got, "  - [HTML Report](/html/Reports/html-report)") {
+		t.Errorf("missing HTML article link in:\n%s", got)
+	}
+	// Should NOT use the raw file path.
+	if strings.Contains(got, "/articles/Reports/html-report.html") {
+		t.Errorf("HTML article should use /html/ route, not raw file path:\n%s", got)
+	}
+}
+
+func TestGenerateSidebarHTMLUnclassified(t *testing.T) {
+	articles := []model.Article{
+		{
+			Title:  "Standalone HTML",
+			File:   "/articles/_unclassified/standalone-html.html",
+			Format: "html",
+			Date:   time.Now(),
+		},
+	}
+	got := GenerateSidebar(articles)
+	if !strings.Contains(got, "  - [Standalone HTML](/html/_unclassified/standalone-html)") {
+		t.Errorf("missing HTML unclassified link in:\n%s", got)
+	}
+}

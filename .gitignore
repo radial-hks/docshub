@@ -4,6 +4,7 @@
 /server
 /cli
 *.exe
+/dist/
 
 # Data (runtime)
 web/articles/
@@ -16,3 +17,6 @@ index.json
 # IDE
 .idea/
 .vscode/
+
+# Hermes
+.hermes/

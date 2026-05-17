@@ -289,3 +289,131 @@ func containsID(articles []model.Article, id string) bool {
 	}
 	return false
 }
+
+func TestHTMLArticleFlow(t *testing.T) {
+	dataDir := t.TempDir()
+
+	htmlSrc, err := os.ReadFile(filepath.Join("..", "web", "index.html"))
+	if err != nil {
+		t.Fatalf("read web/index.html: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dataDir, "index.html"), htmlSrc, 0o644); err != nil {
+		t.Fatalf("write index.html: %v", err)
+	}
+
+	store, err := server.New(dataDir)
+	if err != nil {
+		t.Fatalf("server.New: %v", err)
+	}
+
+	ts := httptest.NewServer(store.Handler())
+	defer ts.Close()
+
+	htmlContent := "<!DOCTYPE html><html><head><title>Report</title></head><body><h1>Quarterly Report</h1><p>Revenue is up.</p></body></html>"
+	pubReq := model.PublishRequest{
+		Title:    "Quarterly Report",
+		Content:  htmlContent,
+		Category: "Finance",
+		Tags:     []string{"quarterly", "report"},
+		Author:   "cfo",
+		Format:   "html",
+	}
+	body, err := json.Marshal(pubReq)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	resp, err := http.Post(ts.URL+"/api/articles", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST /api/articles: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		buf, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 201, got %d, body=%s", resp.StatusCode, buf)
+	}
+
+	var pub model.PublishResponse
+	if err := json.NewDecoder(resp.Body).Decode(&pub); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if pub.Version != 1 {
+		t.Errorf("Version = %d, want 1", pub.Version)
+	}
+	if !strings.HasSuffix(pub.Path, ".html") {
+		t.Errorf("Path = %q, want .html suffix", pub.Path)
+	}
+
+	// Verify file exists on disk.
+	articleDiskPath := filepath.Join(dataDir, filepath.FromSlash(strings.TrimPrefix(pub.Path, "/")))
+	if _, err := os.Stat(articleDiskPath); err != nil {
+		t.Fatalf("HTML file missing on disk at %q: %v", articleDiskPath, err)
+	}
+
+	// GET via the /html/ route.
+	htmlResp, err := http.Get(ts.URL + "/html/Finance/quarterly-report")
+	if err != nil {
+		t.Fatalf("GET /html/Finance/quarterly-report: %v", err)
+	}
+	defer htmlResp.Body.Close()
+	if htmlResp.StatusCode != http.StatusOK {
+		t.Fatalf("GET /html/ status = %d, want 200", htmlResp.StatusCode)
+	}
+	ct := htmlResp.Header.Get("Content-Type")
+	if !strings.Contains(ct, "text/html") {
+		t.Errorf("Content-Type = %q, want text/html", ct)
+	}
+	htmlBody, err := io.ReadAll(htmlResp.Body)
+	if err != nil {
+		t.Fatalf("read HTML body: %v", err)
+	}
+	if !strings.Contains(string(htmlBody), "Revenue is up.") {
+		t.Errorf("HTML body should contain article content, got: %s", htmlBody)
+	}
+
+	// Verify sidebar uses /html/ route for HTML articles.
+	sidebar, err := os.ReadFile(filepath.Join(dataDir, "_sidebar.md"))
+	if err != nil {
+		t.Fatalf("read _sidebar.md: %v", err)
+	}
+	if !strings.Contains(string(sidebar), "/html/Finance/quarterly-report") {
+		t.Errorf("_sidebar.md should use /html/ route for HTML article:\n%s", sidebar)
+	}
+	if strings.Contains(string(sidebar), "/articles/Finance/quarterly-report.html") {
+		t.Errorf("_sidebar.md should NOT use raw file path for HTML articles:\n%s", sidebar)
+	}
+
+	// Verify article metadata via API.
+	getResp, err := http.Get(ts.URL + "/api/articles/" + pub.ID)
+	if err != nil {
+		t.Fatalf("GET /api/articles/{id}: %v", err)
+	}
+	defer getResp.Body.Close()
+	var got model.Article
+	if err := json.NewDecoder(getResp.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Format != "html" {
+		t.Errorf("Format = %q, want html", got.Format)
+	}
+	if strings.Contains(got.Summary, "<") {
+		t.Errorf("Summary should have HTML tags stripped, got %q", got.Summary)
+	}
+	if !strings.Contains(got.Summary, "Quarterly Report") {
+		t.Errorf("Summary should contain text content, got %q", got.Summary)
+	}
+
+	// Verify list API returns the article.
+	listResp, err := http.Get(ts.URL + "/api/articles")
+	if err != nil {
+		t.Fatalf("GET /api/articles: %v", err)
+	}
+	defer listResp.Body.Close()
+	var list []model.Article
+	if err := json.NewDecoder(listResp.Body).Decode(&list); err != nil {
+		t.Fatalf("decode list: %v", err)
+	}
+	if !containsID(list, pub.ID) {
+		t.Errorf("article list missing %q", pub.ID)
+	}
+}

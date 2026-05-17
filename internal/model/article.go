@@ -12,6 +12,7 @@ type Article struct {
 	Date     time.Time `json:"date"`
 	Summary  string    `json:"summary"`
 	Version  int       `json:"version"`
+	Format   string    `json:"format"`
 }
 
 type PublishRequest struct {
@@ -21,6 +22,7 @@ type PublishRequest struct {
 	Tags      []string `json:"tags"`
 	Author    string   `json:"author"`
 	VersionOf string   `json:"version_of,omitempty"`
+	Format    string   `json:"format,omitempty"`
 }
 
 type PublishResponse struct {

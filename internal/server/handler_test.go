@@ -313,3 +313,59 @@ func TestCORSPreflight(t *testing.T) {
 		t.Errorf("Access-Control-Allow-Origin = %q, want *", got)
 	}
 }
+
+func TestHandleServeHTML(t *testing.T) {
+	ts, store, dataDir := newTestServer(t)
+
+	// Create an HTML article via the store directly.
+	_, err := store.Create(model.PublishRequest{
+		Title:    "HTML Doc",
+		Content:  "<!DOCTYPE html><html><body><h1>Hello HTML</h1></body></html>",
+		Category: "Docs",
+		Author:   "alice",
+		Format:   "html",
+	})
+	if err != nil {
+		t.Fatalf("Create HTML article: %v", err)
+	}
+
+	// Verify the file was created on disk.
+	expectedPath := filepath.Join(dataDir, "articles", "Docs", "html-doc.html")
+	if _, err := os.Stat(expectedPath); err != nil {
+		t.Fatalf("HTML file missing on disk: %v", err)
+	}
+
+	resp, err := http.Get(ts.URL + "/html/Docs/html-doc")
+	if err != nil {
+		t.Fatalf("GET /html/Docs/html-doc: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, want 200; body=%s", resp.StatusCode, body)
+	}
+	ct := resp.Header.Get("Content-Type")
+	if !strings.Contains(ct, "text/html") {
+		t.Errorf("Content-Type = %q, want text/html", ct)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	if !strings.Contains(string(body), "<h1>Hello HTML</h1>") {
+		t.Errorf("body = %q, want to contain HTML content", body)
+	}
+}
+
+func TestHandleServeHTMLNotFound(t *testing.T) {
+	ts, _, _ := newTestServer(t)
+
+	resp, err := http.Get(ts.URL + "/html/Nope/missing")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", resp.StatusCode)
+	}
+}

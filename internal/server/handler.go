@@ -3,6 +3,8 @@ package server
 import (
 	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/radial-hks/docshub/internal/model"
@@ -15,6 +17,7 @@ func (s *Store) Handler() http.Handler {
 	mux.HandleFunc("GET /api/articles", s.handleListArticles)
 	mux.HandleFunc("GET /api/articles/{id}", s.handleGetArticle)
 	mux.HandleFunc("DELETE /api/articles/{id}", s.handleDeleteArticle)
+	mux.HandleFunc("GET /html/{category}/{slug}", s.handleServeHTML)
 
 	mux.Handle("/", http.FileServer(http.Dir(s.dataDir)))
 
@@ -102,4 +105,25 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 
 func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
+}
+
+func (s *Store) handleServeHTML(w http.ResponseWriter, r *http.Request) {
+	category := r.PathValue("category")
+	slug := r.PathValue("slug")
+	if category == "" || slug == "" {
+		writeError(w, http.StatusBadRequest, "category and slug required")
+		return
+	}
+	fullPath := filepath.Join(s.dataDir, articlesDirName, category, slug+".html")
+	data, err := os.ReadFile(fullPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			writeError(w, http.StatusNotFound, "article not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "read error")
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write(data)
 }

@@ -8,7 +8,8 @@ import (
 )
 
 // RunInit implements `docshub init`, prompting interactively for the
-// server URL and author and writing the result to ~/.docshub.json.
+// server URL, author, and optional AI classification settings,
+// and writing the result to ~/.docshub.json.
 func RunInit(stdin io.Reader, stdout io.Writer) error {
 	existing, err := LoadConfig()
 	if err != nil {
@@ -22,7 +23,18 @@ func RunInit(stdin io.Reader, stdout io.Writer) error {
 	}
 	author := prompt(sc, stdout, "Author", existing.Author)
 
-	cfg := &Config{ServerURL: serverURL, Author: author}
+	classifyURL := prompt(sc, stdout, "Classify URL (OpenAI-compatible, leave empty to disable)", existing.ClassifyURL)
+	classifyModel := prompt(sc, stdout, "Classify Model", existing.ClassifyModel)
+	if classifyModel == "" {
+		classifyModel = "qwen2.5:7b"
+	}
+
+	cfg := &Config{
+		ServerURL:     serverURL,
+		Author:        author,
+		ClassifyURL:   classifyURL,
+		ClassifyModel: classifyModel,
+	}
 	if err := SaveConfig(cfg); err != nil {
 		return fmt.Errorf("save config: %w", err)
 	}

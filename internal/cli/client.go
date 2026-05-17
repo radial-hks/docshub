@@ -35,6 +35,14 @@ func (c *httpClient) doPost(path string, body any) ([]byte, int, error) {
 	return c.do(req)
 }
 
+func (c *httpClient) doDelete(path string) ([]byte, int, error) {
+	req, err := http.NewRequest(http.MethodDelete, c.baseURL+path, nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	return c.do(req)
+}
+
 func (c *httpClient) doGet(path string) ([]byte, int, error) {
 	req, err := http.NewRequest(http.MethodGet, c.baseURL+path, nil)
 	if err != nil {

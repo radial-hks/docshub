@@ -113,12 +113,16 @@ func (s *Store) Create(req model.PublishRequest) (*model.PublishResponse, error)
 			oldCategoryDir = unclassifiedDir
 		}
 		oldSlug := s.slugify(old.Title)
-		oldFilePath := filepath.Join(s.dataDir, articlesDirName, oldCategoryDir, oldSlug+".md")
+		oldExt := ".md"
+		if old.Format == "html" {
+			oldExt = ".html"
+		}
+		oldFilePath := filepath.Join(s.dataDir, articlesDirName, oldCategoryDir, oldSlug+oldExt)
 		versionDir := filepath.Join(s.dataDir, articlesDirName, oldCategoryDir, versionsDirName, oldSlug)
 		if err := os.MkdirAll(versionDir, 0o755); err != nil {
 			return nil, fmt.Errorf("create versions dir: %w", err)
 		}
-		archivedName := fmt.Sprintf("v%d-%s.md", old.Version, old.Date.Format("20060102"))
+		archivedName := fmt.Sprintf("v%d-%s%s", old.Version, old.Date.Format("20060102"), oldExt)
 		archivedPath := filepath.Join(versionDir, archivedName)
 		if err := os.Rename(oldFilePath, archivedPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return nil, fmt.Errorf("archive old version: %w", err)
@@ -168,12 +172,18 @@ func (s *Store) Create(req model.PublishRequest) (*model.PublishResponse, error)
 		}
 	}
 
+	// Determine file extension based on format.
+	ext := ".md"
+	if req.Format == "html" {
+		ext = ".html"
+	}
+
 	categoryDir := article.Category
 	if categoryDir == "" {
 		categoryDir = unclassifiedDir
 	}
 	slug := s.slugify(article.Title)
-	relPath := filepath.Join(articlesDirName, categoryDir, slug+".md")
+	relPath := filepath.Join(articlesDirName, categoryDir, slug+ext)
 	fullPath := filepath.Join(s.dataDir, relPath)
 
 	if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
@@ -184,7 +194,12 @@ func (s *Store) Create(req model.PublishRequest) (*model.PublishResponse, error)
 	}
 
 	article.File = "/" + filepath.ToSlash(relPath)
-	article.Summary = s.extractSummary(req.Content)
+	if req.Format == "html" {
+		article.Summary = extractSummaryHTML(req.Content)
+	} else {
+		article.Summary = s.extractSummary(req.Content)
+	}
+	article.Format = req.Format
 
 	s.articles = append(s.articles, article)
 	if err := s.saveIndex(); err != nil {
@@ -268,7 +283,11 @@ func (s *Store) Delete(id string) error {
 		categoryDir = unclassifiedDir
 	}
 	slug := s.slugify(article.Title)
-	fullPath := filepath.Join(s.dataDir, articlesDirName, categoryDir, slug+".md")
+	ext := ".md"
+	if article.Format == "html" {
+		ext = ".html"
+	}
+	fullPath := filepath.Join(s.dataDir, articlesDirName, categoryDir, slug+ext)
 	if err := os.Remove(fullPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("remove article file: %w", err)
 	}
@@ -281,14 +300,21 @@ func (s *Store) Delete(id string) error {
 
 var slugReplaceRE = regexp.MustCompile(`[^a-z0-9]+`)
 
-func (s *Store) slugify(title string) string {
+// Slugify converts a title to a URL-safe slug. If the result would be empty
+// (e.g. the title contains only non-ASCII characters such as Chinese), a
+// timestamp-based fallback is used.
+func Slugify(title string) string {
 	lower := strings.ToLower(strings.TrimSpace(title))
 	slug := slugReplaceRE.ReplaceAllString(lower, "-")
 	slug = strings.Trim(slug, "-")
 	if slug == "" {
-		slug = "article"
+		slug = fmt.Sprintf("article-%d", time.Now().UnixMilli())
 	}
 	return slug
+}
+
+func (s *Store) slugify(title string) string {
+	return Slugify(title)
 }
 
 func (s *Store) generateID(title string) string {
@@ -317,6 +343,20 @@ func (s *Store) extractSummary(content string) string {
 	c = mdCodeRE.ReplaceAllString(c, "$1")
 	c = mdQuoteRE.ReplaceAllString(c, "")
 	c = mdListRE.ReplaceAllString(c, "")
+	c = whitespaceRE.ReplaceAllString(c, " ")
+	c = strings.TrimSpace(c)
+	runes := []rune(c)
+	if len(runes) > summaryMaxLength {
+		return string(runes[:summaryMaxLength])
+	}
+	return c
+}
+
+var htmlTagRE = regexp.MustCompile(`<[^>]*>`)
+
+// extractSummaryHTML strips HTML tags and truncates to summaryMaxLength characters.
+func extractSummaryHTML(content string) string {
+	c := htmlTagRE.ReplaceAllString(content, " ")
 	c = whitespaceRE.ReplaceAllString(c, " ")
 	c = strings.TrimSpace(c)
 	runes := []rune(c)

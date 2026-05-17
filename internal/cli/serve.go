@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"fmt"
@@ -9,7 +9,7 @@ import (
 	"github.com/radial-hks/docshub/internal/server"
 )
 
-func main() {
+func RunServe() error {
 	port := os.Getenv("DOCSHUB_PORT")
 	if port == "" {
 		port = "8080"
@@ -21,12 +21,13 @@ func main() {
 
 	s, err := server.New(dataDir)
 	if err != nil {
-		log.Fatalf("Failed to initialize server: %v", err)
+		return fmt.Errorf("failed to initialize server: %w", err)
 	}
 
 	addr := fmt.Sprintf(":%s", port)
 	log.Printf("Docshub server starting on %s, data dir: %s", addr, dataDir)
 	if err := http.ListenAndServe(addr, s.Handler()); err != nil {
-		log.Fatalf("Server error: %v", err)
+		return fmt.Errorf("server error: %w", err)
 	}
+	return nil
 }

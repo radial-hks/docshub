@@ -9,8 +9,10 @@ import (
 )
 
 type Config struct {
-	ServerURL string `json:"server_url"`
-	Author    string `json:"author"`
+	ServerURL     string `json:"server_url"`
+	Author        string `json:"author"`
+	ClassifyURL   string `json:"classify_url,omitempty"`
+	ClassifyModel string `json:"classify_model,omitempty"`
 }
 
 const defaultServerURL = "http://localhost:8080"

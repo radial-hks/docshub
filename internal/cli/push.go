@@ -105,10 +105,12 @@ func unquote(s string) string {
 
 // PushOptions captures flag inputs for the push command.
 type PushOptions struct {
-	Category string
-	Tags     string
-	Yes      bool
-	Classify string
+	Category     string
+	Tags         string
+	Yes          bool
+	Classify     bool
+	ClassifyJSON string
+	Format       string
 }
 
 // RunPush implements `docshub push <file> [flags]`.
@@ -119,7 +121,9 @@ func RunPush(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	fs.StringVar(&opts.Category, "category", "", "category for the article")
 	fs.StringVar(&opts.Tags, "tags", "", "comma-separated tags")
 	fs.BoolVar(&opts.Yes, "yes", false, "skip confirmation prompt")
-	fs.StringVar(&opts.Classify, "classify", "", "raw JSON {title,category,tags,author} to override")
+	fs.BoolVar(&opts.Classify, "classify", false, "use AI to suggest title/category/tags via local LLM")
+	fs.StringVar(&opts.ClassifyJSON, "classify-json", "", "raw JSON {title,category,tags,author} to override metadata")
+	fs.StringVar(&opts.Format, "format", "", "article format: html or md (auto-detected from file extension)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -142,6 +146,17 @@ func RunPush(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	req, err := buildPublishRequest(file, string(content), opts, cfg)
 	if err != nil {
 		return err
+	}
+
+	// If --classify is set, call the LLM and offer suggestions.
+	if opts.Classify {
+		result, err := ClassifyWithLLM(req.Content, cfg)
+		if err != nil {
+			fmt.Fprintf(stderr, "Warning: AI classification failed: %v\n", err)
+		} else if result != nil {
+			// Apply AI suggestions to fields that are still empty or at defaults.
+			applyClassifyResult(&req, result, stdout)
+		}
 	}
 
 	printSummary(stdout, req)
@@ -173,10 +188,51 @@ func RunPush(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	return nil
 }
 
+// applyClassifyResult merges the LLM-suggested metadata into the request.
+// Priority chain: --classify-json > --classify (AI result) > CLI flags > frontmatter > defaults.
+// So AI suggestions only fill in fields that haven't already been set by higher-priority sources.
+func applyClassifyResult(req *model.PublishRequest, result *ClassifyResult, stdout io.Writer) {
+	fmt.Fprintln(stdout, "AI suggests:")
+	if result.Title != "" {
+		fmt.Fprintf(stdout, "  Title:    %s\n", result.Title)
+	}
+	if result.Category != "" {
+		fmt.Fprintf(stdout, "  Category: %s\n", result.Category)
+	}
+	if len(result.Tags) > 0 {
+		fmt.Fprintf(stdout, "  Tags:     %s\n", strings.Join(result.Tags, ", "))
+	}
+	if result.Author != "" {
+		fmt.Fprintf(stdout, "  Author:   %s\n", result.Author)
+	}
+	fmt.Fprintln(stdout)
+
+	// Apply suggestions where current values are empty/default.
+	if result.Title != "" {
+		req.Title = result.Title
+	}
+	if result.Category != "" {
+		req.Category = result.Category
+	}
+	if len(result.Tags) > 0 {
+		req.Tags = result.Tags
+	}
+	if result.Author != "" {
+		req.Author = result.Author
+	}
+}
+
 // buildPublishRequest applies the priority rules:
-// classify JSON > CLI flags > frontmatter > defaults.
+// classify-json > classify (AI result) > CLI flags > frontmatter > defaults.
+// Format detection: file extension auto-detect, but --format flag overrides.
 func buildPublishRequest(file, content string, opts PushOptions, cfg *Config) (model.PublishRequest, error) {
 	fm, body := parseFrontmatter(content)
+
+	// Auto-detect format from file extension.
+	detectedFormat := "md"
+	if ext := strings.ToLower(filepath.Ext(file)); ext == ".html" || ext == ".htm" {
+		detectedFormat = "html"
+	}
 
 	req := model.PublishRequest{
 		Title:    fm.Title,
@@ -184,8 +240,15 @@ func buildPublishRequest(file, content string, opts PushOptions, cfg *Config) (m
 		Tags:     append([]string(nil), fm.Tags...),
 		Author:   fm.Author,
 		Content:  body,
+		Format:   detectedFormat,
 	}
 
+	// --format flag overrides auto-detected format.
+	if opts.Format != "" {
+		req.Format = strings.ToLower(opts.Format)
+	}
+
+	// CLI flags override frontmatter.
 	if opts.Category != "" {
 		req.Category = opts.Category
 	}
@@ -193,15 +256,16 @@ func buildPublishRequest(file, content string, opts PushOptions, cfg *Config) (m
 		req.Tags = parseTagList(opts.Tags)
 	}
 
-	if opts.Classify != "" {
+	// --classify-json overrides everything (highest priority).
+	if opts.ClassifyJSON != "" {
 		var c struct {
 			Title    string   `json:"title"`
 			Category string   `json:"category"`
 			Tags     []string `json:"tags"`
 			Author   string   `json:"author"`
 		}
-		if err := json.Unmarshal([]byte(opts.Classify), &c); err != nil {
-			return req, fmt.Errorf("parse --classify: %w", err)
+		if err := json.Unmarshal([]byte(opts.ClassifyJSON), &c); err != nil {
+			return req, fmt.Errorf("parse --classify-json: %w", err)
 		}
 		if c.Title != "" {
 			req.Title = c.Title
@@ -238,6 +302,7 @@ func printSummary(w io.Writer, req model.PublishRequest) {
 	}
 	fmt.Fprintf(w, "  Tags:     %s\n", tags)
 	fmt.Fprintf(w, "  Author:   %s\n", displayOrDash(req.Author))
+	fmt.Fprintf(w, "  Format:   %s\n", req.Format)
 }
 
 func displayOrDash(s string) string {

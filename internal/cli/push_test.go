@@ -118,9 +118,9 @@ body
 `
 	cfg := &Config{Author: "cfg-author"}
 	opts := PushOptions{
-		Category: "FlagCat",
-		Tags:     "f1,f2",
-		Classify: `{"title":"AI Title","category":"AI","tags":["llm","rag"],"author":"ai"}`,
+		Category:     "FlagCat",
+		Tags:         "f1,f2",
+		ClassifyJSON: `{"title":"AI Title","category":"AI","tags":["llm","rag"],"author":"ai"}`,
 	}
 	req, err := buildPublishRequest("/tmp/note.md", content, opts, cfg)
 	if err != nil {
@@ -138,5 +138,39 @@ body
 	wantTags := []string{"llm", "rag"}
 	if !reflect.DeepEqual(req.Tags, wantTags) {
 		t.Errorf("Tags = %v, want %v", req.Tags, wantTags)
+	}
+}
+
+func TestBuildPublishRequest_FormatAutoDetectMD(t *testing.T) {
+	cfg := &Config{Author: "default"}
+	req, err := buildPublishRequest("/tmp/note.md", "hello", PushOptions{}, cfg)
+	if err != nil {
+		t.Fatalf("buildPublishRequest: %v", err)
+	}
+	if req.Format != "md" {
+		t.Errorf("Format = %q, want md for .md file", req.Format)
+	}
+}
+
+func TestBuildPublishRequest_FormatAutoDetectHTML(t *testing.T) {
+	cfg := &Config{Author: "default"}
+	req, err := buildPublishRequest("/tmp/report.html", "<h1>Hi</h1>", PushOptions{}, cfg)
+	if err != nil {
+		t.Fatalf("buildPublishRequest: %v", err)
+	}
+	if req.Format != "html" {
+		t.Errorf("Format = %q, want html for .html file", req.Format)
+	}
+}
+
+func TestBuildPublishRequest_FormatFlagOverrides(t *testing.T) {
+	cfg := &Config{Author: "default"}
+	opts := PushOptions{Format: "html"}
+	req, err := buildPublishRequest("/tmp/note.md", "hello", opts, cfg)
+	if err != nil {
+		t.Fatalf("buildPublishRequest: %v", err)
+	}
+	if req.Format != "html" {
+		t.Errorf("Format = %q, want html from --format flag override", req.Format)
 	}
 }

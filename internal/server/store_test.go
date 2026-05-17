@@ -371,17 +371,21 @@ func TestGenerateIDDeterministicAndURLSafe(t *testing.T) {
 func TestSlugifySpecialChars(t *testing.T) {
 	s := &Store{}
 	cases := map[string]string{
-		"Hello World":            "hello-world",
-		"  Trim me!  ":           "trim-me",
-		"AI & ML/NLP":            "ai-ml-nlp",
-		"Already-Sluggy":         "already-sluggy",
-		"~~~":                    "article",
+		"Hello World":    "hello-world",
+		"  Trim me!  ":  "trim-me",
+		"AI & ML/NLP":   "ai-ml-nlp",
+		"Already-Sluggy": "already-sluggy",
 	}
 	for in, want := range cases {
 		got := s.slugify(in)
 		if got != want {
 			t.Errorf("slugify(%q) = %q, want %q", in, got, want)
 		}
+	}
+	// Non-ASCII-only titles get a timestamp-based fallback.
+	got := s.slugify("~~~")
+	if !strings.HasPrefix(got, "article-") {
+		t.Errorf("slugify(\"~~~\") = %q, want prefix article-", got)
 	}
 }
 
@@ -434,5 +438,74 @@ func TestLoadIndexPersists(t *testing.T) {
 	}
 	if got.Title != "Persist" {
 		t.Fatalf("expected Persist, got %s", got.Title)
+	}
+}
+
+func TestCreateHTMLArticle(t *testing.T) {
+	s, dir := newTestStore(t)
+
+	resp, err := s.Create(model.PublishRequest{
+		Title:    "HTML Report",
+		Content:  "<h1>Report</h1><p>This is an HTML article.</p>",
+		Category: "Reports",
+		Author:   "alice",
+		Format:   "html",
+	})
+	if err != nil {
+		t.Fatalf("Create HTML article failed: %v", err)
+	}
+	if resp.Version != 1 {
+		t.Fatalf("expected version 1, got %d", resp.Version)
+	}
+
+	expectedPath := filepath.Join(dir, "articles", "Reports", "html-report.html")
+	data, err := os.ReadFile(expectedPath)
+	if err != nil {
+		t.Fatalf("HTML article file missing at %s: %v", expectedPath, err)
+	}
+	if !strings.Contains(string(data), "<h1>Report</h1>") {
+		t.Fatalf("HTML content mismatch: %q", string(data))
+	}
+	if resp.Path != "/articles/Reports/html-report.html" {
+		t.Fatalf("unexpected path: %s", resp.Path)
+	}
+
+	// Verify article metadata.
+	article, err := s.Get(resp.ID)
+	if err != nil {
+		t.Fatalf("Get failed: %v", err)
+	}
+	if article.Format != "html" {
+		t.Fatalf("expected format html, got %q", article.Format)
+	}
+	if !strings.Contains(article.Summary, "Report") {
+		t.Fatalf("expected summary from HTML, got %q", article.Summary)
+	}
+	// Verify HTML tags are stripped from summary.
+	if strings.Contains(article.Summary, "<") {
+		t.Fatalf("summary should have HTML tags stripped, got %q", article.Summary)
+	}
+}
+
+func TestExtractSummaryHTML(t *testing.T) {
+	content := "<h1>Title</h1><p>This is <strong>bold</strong> and <em>italic</em> text.</p>"
+	got := extractSummaryHTML(content)
+	want := "Title This is bold and italic text."
+	if got != want {
+		t.Fatalf("extractSummaryHTML mismatch:\n got: %q\nwant: %q", got, want)
+	}
+
+	// Truncation to 200 chars.
+	long := "<p>" + strings.Repeat("a", 500) + "</p>"
+	got = extractSummaryHTML(long)
+	if len([]rune(got)) != 200 {
+		t.Fatalf("expected summary length 200, got %d", len([]rune(got)))
+	}
+}
+
+func TestSlugifyChineseFallback(t *testing.T) {
+	slug := Slugify("中文标题")
+	if !strings.HasPrefix(slug, "article-") {
+		t.Fatalf("expected timestamp-based fallback for Chinese, got %q", slug)
 	}
 }
